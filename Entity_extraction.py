@@ -22,6 +22,7 @@ from spellchecker import SpellChecker   # Spelling checker
 from nltk.chunk import tree2conlltags
 from pprint import pprint
 from nltk import RegexpParser
+from nltk.tag.stanford import StanfordNERTagger
 
 #%% Read WARC-file
 # Initialize list of DocumentIDs and HTML-codes
@@ -105,8 +106,8 @@ df_token['Token']  = [token[0].lower() for token in df_token['TokensTagged']]
 df_token['Type']   = [token[1] for token in df_token['TokensTagged']]
 
 ## Filter dataframe on nouns only
-#df_token              = df_token[df_token['Type'].str.startswith("NN")]
-#df_token              = df_token.drop('TokensTagged', axis=1)
+df_token              = df_token[df_token['Type'].str.startswith("NN")]
+df_token              = df_token.drop('TokensTagged', axis=1)
     
 #%% Stop word removal
 """
@@ -128,19 +129,20 @@ are unknown are corrected.
 
 #%% Stemming/lemmatization
 """
-Use stemming/lemmatization to make each term unique by meaning and save space
+Use lemmatization to make each term unique by meaning and save space
 Some terms which have the same meaning are classified as distinct terms and 
-hurt the similarity. Use stemming/lemmatization to make each term unique by 
-meaning and save space. However, unlike stemming, lemmatization depends on 
+hurt the similarity. We use lemmatization to make each term unique by 
+meaning and save space. As, unlike stemming, lemmatization depends on 
 correctly identifying the intended meaning of the word in a sentence.
 """
-df_stop['Lemma'] = [PorterStemmer().stem(token) for token in df_stop['Token']]
+df_stop['Lemma'] = [WordNetLemmatizer().lemmatize(token) for token in df_stop['Token']]
 
 #### CHECK FOR THE DIFFERENCE BETWEEN STEMMING AND LEMMATIZATION
-#lemma1 = [PorterStemmer().stem(token) for token in df_stop['Token']]
-#lemma2 = [WordNetLemmatizer().lemmatize(token) for token in df_stop['Token']]
-#tokensDiff = pd.DataFrame([lemma1, lemma2]).T
-#tokensDiff['Diff_YN'] = tokensDiff[0].equals(tokensDiff[1])
+#a = pd.DataFrame()
+#a['Token'] = df_stop['Token']
+#a['Stem'] = [PorterStemmer().stem(token) for token in df_stop['Token']]
+#a['Lemma'] = [WordNetLemmatizer().lemmatize(token) for token in df_stop['Token']]
+#a['Equal_YN'] = (a.Stem == a.Lemma)
 
 #%% Group similar words per recordID
 """
@@ -149,9 +151,32 @@ grouped on recordID and lemma. The number of times a word appears in the text
 is saved in the column "N"
 """
 df_def = df_stop.groupby(['RecordID', 'Lemma'], as_index=False).count()[['RecordID','Lemma','Token']]
-df_def.rename({"Token": "N"}, axis='columns')
+df_def = df_def.rename({"Token": "N"}, axis='columns')
 
-#%% Tagging
+
+#%% Stanford NER
+"""
+Assign the type to a named entity
+3 class: Location, Person, Organization
+4 class:	 Location, Person, Organization, Misc
+7 class:	 Location, Person, Organization, Money, Percent, Date, Time
+"""
+
+path = "/Users/reneehaegens/Desktop/Web Data Processing Systems/Assignment/stanford-ner-2018-10-16/"
+classifier = path + "classifiers/english.all.3class.distsim.crf.ser.gz"
+#classifier = path + "classifiers/english.conll.4class.distsim.crf.ser.gz"
+#classifier = path + "/classifiers/english.muc.7class.distsim.crf.ser.gz"
+jar        = path + "stanford-ner.jar"
+st         = StanfordNERTagger(classifier, jar)
+ner_tokens = st.tag(df_def['Lemma'])
+df_def['NER']= [token[1] for token in ner_tokens]
+
+## Obtain all the tagged_tokens
+#ner_tagged_tokens = []
+#for token in ner_tokens:
+#    if token[1] != 'O':
+#        ner_tagged_tokens.append(token)
+
 
 #%% Obtain total run time of entity extraction
 print(time.time() - t0)
